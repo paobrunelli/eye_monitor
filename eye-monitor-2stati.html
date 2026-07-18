@@ -3,15 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<title>Monitor Occhi</title>
+<title>Monitor Occhi (2 stati)</title>
 <style>
   :root {
     --bg: #9a9a9e;
     --black: #101012;
     --red: #d5372f;
     --green: #2f9e5a;
-    --yellow: #d9b125;
-    --blue: #2f6fd5;
     --ink: #1a1a1c;
     --dim: #4a4a4e;
   }
@@ -46,10 +44,8 @@
     cursor: pointer;
   }
   #btn:active { transform: scale(0.97); }
-  #btn.red    { background: var(--red);    box-shadow: 0 0 60px 6px rgba(213,55,47,0.45); }
-  #btn.green  { background: var(--green);  box-shadow: 0 0 60px 6px rgba(47,158,90,0.4); }
-  #btn.yellow { background: var(--yellow); box-shadow: 0 0 60px 6px rgba(217,177,37,0.45); }
-  #btn.blue   { background: var(--blue);   box-shadow: 0 0 60px 6px rgba(47,111,213,0.45); }
+  #btn.red   { background: var(--red);   box-shadow: 0 0 60px 6px rgba(213,55,47,0.45); }
+  #btn.green { background: var(--green); box-shadow: 0 0 60px 6px rgba(47,158,90,0.4); }
   #btn.alarm { animation: pulse 0.9s ease-in-out infinite; }
   @keyframes pulse {
     0%, 100% { box-shadow: 0 0 60px 6px rgba(213,55,47,0.45); }
@@ -147,10 +143,7 @@ const btn = document.getElementById("btn");
 const statusEl = document.getElementById("status");
 const previewEl = document.getElementById("preview");
 
-// stato dell'app: 'idle' | 'searching' | 'open' | 'left-closed' | 'right-closed' | 'both-closed'
-// left/right sono riferiti all'occhio della persona inquadrata (sinistro/destro
-// anatomico, non alla posizione sullo schermo): coincidono con i blendshape
-// MediaPipe eyeBlinkLeft/eyeBlinkRight, che sono già riferiti al soggetto.
+// stato dell'app: 'idle' | 'searching' | 'open' | 'closed'
 let appState = "idle";
 let running = false;
 
@@ -163,46 +156,19 @@ let audioCtx = null;
 let oscillator = null;
 let gainNode = null;
 
-// isteresi / debounce sulla chiusura occhi, applicata indipendentemente ai due occhi
+// isteresi / debounce sulla chiusura occhi
 const CLOSE_THRESHOLD = 0.62;
 const OPEN_THRESHOLD = 0.35;
-const CLOSE_HOLD_MS = 550; // quanto un occhio deve restare chiuso prima di considerarlo tale
-let leftEye = { closed: false, closedSinceTs: null };
-let rightEye = { closed: false, closedSinceTs: null };
-
-function resetEyeTrackers() {
-  leftEye = { closed: false, closedSinceTs: null };
-  rightEye = { closed: false, closedSinceTs: null };
-}
-
-// Aggiorna lo stato aperto/chiuso di un occhio applicando isteresi + debounce
-// sulla chiusura (evita che un singolo blink venga scambiato per "chiuso").
-function updateEyeState(eye, score, now) {
-  if (score === null) return eye;
-  if (score > CLOSE_THRESHOLD) {
-    if (eye.closedSinceTs === null) eye.closedSinceTs = now;
-    if (!eye.closed && now - eye.closedSinceTs > CLOSE_HOLD_MS) {
-      eye.closed = true;
-    }
-  } else if (score < OPEN_THRESHOLD) {
-    eye.closedSinceTs = null;
-    eye.closed = false;
-  }
-  // zona intermedia: nessun cambio di stato, evita sfarfallio
-  return eye;
-}
+const CLOSE_HOLD_MS = 550; // quanto devono restare chiusi prima di far scattare l'allarme
+let closedSinceTs = null;
 
 function setButtonVisual(state) {
-  btn.classList.remove("red", "green", "yellow", "blue", "alarm");
+  btn.classList.remove("red", "green", "alarm");
   if (state === "searching") {
     btn.classList.add("red");
   } else if (state === "open") {
     btn.classList.add("green");
-  } else if (state === "left-closed") {
-    btn.classList.add("yellow");
-  } else if (state === "right-closed") {
-    btn.classList.add("blue");
-  } else if (state === "both-closed") {
+  } else if (state === "closed") {
     btn.classList.add("red", "alarm");
   }
 }
@@ -212,9 +178,7 @@ function setStatusText(state) {
     idle: "Tocca per iniziare",
     searching: "Ricerca volto…",
     open: "Occhi aperti",
-    "left-closed": "Occhio sinistro chiuso",
-    "right-closed": "Occhio destro chiuso",
-    "both-closed": "Occhi chiusi",
+    closed: "Occhi chiusi",
   };
   statusEl.textContent = map[state] ?? "";
 }
@@ -301,15 +265,15 @@ function stopCamera() {
   videoEl = null;
 }
 
-function blinkScores(result) {
+function blinkScore(result) {
   const cats = result.faceBlendshapes?.[0]?.categories;
-  if (!cats) return { left: null, right: null };
-  let left = null, right = null;
+  if (!cats) return null;
+  let left = 0, right = 0;
   for (const c of cats) {
     if (c.categoryName === "eyeBlinkLeft") left = c.score;
     if (c.categoryName === "eyeBlinkRight") right = c.score;
   }
-  return { left, right };
+  return (left + right) / 2;
 }
 
 function loop() {
@@ -320,32 +284,25 @@ function loop() {
   const hasFace = (result.faceLandmarks && result.faceLandmarks.length > 0);
 
   if (!hasFace) {
-    resetEyeTrackers();
+    closedSinceTs = null;
     stopAlarmSound();
     if (appState !== "searching") setAppState("searching");
   } else {
-    const { left, right } = blinkScores(result);
-    updateEyeState(leftEye, left, now);
-    updateEyeState(rightEye, right, now);
+    const score = blinkScore(result);
+    const currentlyClosed = appState === "closed";
 
-    let newState;
-    if (leftEye.closed && rightEye.closed) {
-      newState = "both-closed";
-    } else if (leftEye.closed) {
-      newState = "left-closed";
-    } else if (rightEye.closed) {
-      newState = "right-closed";
-    } else {
-      newState = "open";
-    }
-
-    if (newState === "both-closed") {
-      startAlarmSound();
-    } else {
+    if (score !== null && score > CLOSE_THRESHOLD) {
+      if (closedSinceTs === null) closedSinceTs = now;
+      if (now - closedSinceTs > CLOSE_HOLD_MS) {
+        if (!currentlyClosed) setAppState("closed");
+        startAlarmSound();
+      }
+    } else if (score === null || score < OPEN_THRESHOLD) {
+      closedSinceTs = null;
       stopAlarmSound();
+      if (appState !== "open") setAppState("open");
     }
-
-    if (appState !== newState) setAppState(newState);
+    // zona intermedia: nessun cambio di stato, evita sfarfallio
   }
 
   rafId = requestAnimationFrame(loop);
@@ -380,7 +337,7 @@ function pause() {
   running = false;
   if (rafId) cancelAnimationFrame(rafId);
   rafId = null;
-  resetEyeTrackers();
+  closedSinceTs = null;
   stopAlarmSound();
   stopCamera();
   setAppState("idle");

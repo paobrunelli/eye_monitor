@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>Monitor Occhi (4 stati)</title>
+<style>
+  :root {
+    --bg: #9a9a9e;
+    --black: #101012;
+    --red: #d5372f;
+    --green: #2f9e5a;
+    --yellow: #d9b125;
+    --blue: #2f6fd5;
+    --ink: #1a1a1c;
+    --dim: #4a4a4e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; width: 100%;
+    background: var(--bg);
+    overflow: hidden;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    touch-action: manipulation;
+  }
+  .stage {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 24px;
+  }
+  #btn {
+    width: min(58vw, 280px);
+    height: min(58vw, 280px);
+    border-radius: 50%;
+    border: none;
+    background: var(--black);
+    box-shadow:
+      0 8px 24px rgba(0,0,0,0.35),
+      0 0 0 3px rgba(255,255,255,0.5);
+    transition: background 220ms ease, box-shadow 220ms ease, transform 120ms ease;
+    cursor: pointer;
+  }
+  #btn:active { transform: scale(0.97); }
+  #btn.red    { background: var(--red);    box-shadow: 0 0 60px 6px rgba(213,55,47,0.45); }
+  #btn.green  { background: var(--green);  box-shadow: 0 0 60px 6px rgba(47,158,90,0.4); }
+  #btn.yellow { background: var(--yellow); box-shadow: 0 0 60px 6px rgba(217,177,37,0.45); }
+  #btn.blue   { background: var(--blue);   box-shadow: 0 0 60px 6px rgba(47,111,213,0.45); }
+  #btn.alarm { animation: pulse 0.9s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 60px 6px rgba(213,55,47,0.45); }
+    50%      { box-shadow: 0 0 90px 18px rgba(213,55,47,0.75); }
+  }
+  #status {
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--dim);
+    text-align: center;
+    min-height: 20px;
+    font-weight: 500;
+  }
+  #preview {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0;
+    transition: opacity 300ms ease;
+    border: 1px solid rgba(255,255,255,0.15);
+    pointer-events: none;
+  }
+  #preview.visible { opacity: 0.9; }
+  #hint {
+    position: fixed;
+    bottom: 22px;
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  #debug {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    max-height: 40vh;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.88);
+    color: #7CFC7C;
+    font: 11px/1.4 ui-monospace, monospace;
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+    z-index: 999;
+  }
+  #debug.visible { display: block; }
+  #debug .err { color: #ff6b5e; }
+  @media (prefers-reduced-motion: reduce) {
+    #btn.alarm { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <button id="btn" aria-label="Stato monitor occhi"></button>
+    <div id="status">Tocca per iniziare</div>
+  </div>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="hint">Tocca il bottone in qualsiasi momento per metterlo in pausa</div>
+  <div id="debug"></div>
+
+<script>
+  // Script "classico" (non modulo): gira SEMPRE, anche se il modulo sotto
+  // fallisce a caricarsi (es. su file:// dove i moduli ES sono bloccati).
+  // Mostra ogni errore direttamente in pagina, senza bisogno di devtools.
+  const debugPanel = document.getElementById("debug");
+  function logDebug(msg, isErr) {
+    debugPanel.classList.add("visible");
+    const line = document.createElement("div");
+    if (isErr) line.className = "err";
+    line.textContent = msg;
+    debugPanel.appendChild(line);
+    debugPanel.scrollTop = debugPanel.scrollHeight;
+  }
+  window.addEventListener("error", (e) => {
+    logDebug("Errore: " + (e.message || e.error) + (e.filename ? " @ " + e.filename + ":" + e.lineno : ""), true);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    logDebug("Promise non gestita: " + (e.reason?.message || e.reason), true);
+  });
+  logDebug("Protocollo pagina: " + location.protocol + " — se è 'file:' i moduli ES potrebbero essere bloccati.");
+</script>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+window.__moduleLoaded = true;
+logDebug("Modulo MediaPipe importato correttamente.");
+
+const btn = document.getElementById("btn");
+const statusEl = document.getElementById("status");
+const previewEl = document.getElementById("preview");
+
+// stato dell'app: 'idle' | 'searching' | 'open' | 'left-closed' | 'right-closed' | 'both-closed'
+// left/right sono riferiti all'occhio della persona inquadrata (sinistro/destro
+// anatomico, non alla posizione sullo schermo): coincidono con i blendshape
+// MediaPipe eyeBlinkLeft/eyeBlinkRight, che sono già riferiti al soggetto.
+let appState = "idle";
+let running = false;
+
+let videoEl = null;
+let stream = null;
+let landmarker = null;
+let rafId = null;
+
+let audioCtx = null;
+let oscillator = null;
+let gainNode = null;
+
+// isteresi / debounce sulla chiusura occhi, applicata indipendentemente ai due occhi
+const CLOSE_THRESHOLD = 0.62;
+const OPEN_THRESHOLD = 0.35;
+const CLOSE_HOLD_MS = 550; // quanto un occhio deve restare chiuso prima di considerarlo tale
+let leftEye = { closed: false, closedSinceTs: null };
+let rightEye = { closed: false, closedSinceTs: null };
+
+function resetEyeTrackers() {
+  leftEye = { closed: false, closedSinceTs: null };
+  rightEye = { closed: false, closedSinceTs: null };
+}
+
+// Aggiorna lo stato aperto/chiuso di un occhio applicando isteresi + debounce
+// sulla chiusura (evita che un singolo blink venga scambiato per "chiuso").
+function updateEyeState(eye, score, now) {
+  if (score === null) return eye;
+  if (score > CLOSE_THRESHOLD) {
+    if (eye.closedSinceTs === null) eye.closedSinceTs = now;
+    if (!eye.closed && now - eye.closedSinceTs > CLOSE_HOLD_MS) {
+      eye.closed = true;
+    }
+  } else if (score < OPEN_THRESHOLD) {
+    eye.closedSinceTs = null;
+    eye.closed = false;
+  }
+  // zona intermedia: nessun cambio di stato, evita sfarfallio
+  return eye;
+}
+
+function setButtonVisual(state) {
+  btn.classList.remove("red", "green", "yellow", "blue", "alarm");
+  if (state === "searching") {
+    btn.classList.add("red");
+  } else if (state === "open") {
+    btn.classList.add("green");
+  } else if (state === "left-closed") {
+    btn.classList.add("yellow");
+  } else if (state === "right-closed") {
+    btn.classList.add("blue");
+  } else if (state === "both-closed") {
+    btn.classList.add("red", "alarm");
+  }
+}
+
+function setStatusText(state) {
+  const map = {
+    idle: "Tocca per iniziare",
+    searching: "Ricerca volto…",
+    open: "Occhi aperti",
+    "left-closed": "Occhio sinistro chiuso",
+    "right-closed": "Occhio destro chiuso",
+    "both-closed": "Occhi chiusi",
+  };
+  statusEl.textContent = map[state] ?? "";
+}
+
+function setAppState(state) {
+  appState = state;
+  setButtonVisual(state);
+  setStatusText(state);
+}
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume().catch((e) => console.warn("Audio resume:", e));
+  }
+}
+
+function startAlarmSound() {
+  ensureAudio();
+  if (oscillator) return;
+  oscillator = audioCtx.createOscillator();
+  gainNode = audioCtx.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = 880;
+  gainNode.gain.value = 0.15;
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  oscillator.start();
+}
+
+function stopAlarmSound() {
+  if (oscillator) {
+    try { oscillator.stop(); } catch (e) {}
+    oscillator.disconnect();
+    gainNode.disconnect();
+    oscillator = null;
+    gainNode = null;
+  }
+}
+
+async function loadLandmarker() {
+  if (landmarker) return landmarker;
+  const filesetResolver = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      delegate: "GPU",
+    },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: false,
+  });
+  return landmarker;
+}
+
+async function startCamera() {
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: 640, height: 480 },
+    audio: false,
+  });
+  videoEl = document.createElement("video");
+  videoEl.srcObject = stream;
+  videoEl.muted = true;
+  videoEl.playsInline = true;
+  await videoEl.play();
+
+  previewEl.srcObject = stream;
+  previewEl.classList.add("visible");
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+  }
+  previewEl.classList.remove("visible");
+  previewEl.srcObject = null;
+  videoEl = null;
+}
+
+function blinkScores(result) {
+  const cats = result.faceBlendshapes?.[0]?.categories;
+  if (!cats) return { left: null, right: null };
+  let left = null, right = null;
+  for (const c of cats) {
+    if (c.categoryName === "eyeBlinkLeft") left = c.score;
+    if (c.categoryName === "eyeBlinkRight") right = c.score;
+  }
+  return { left, right };
+}
+
+function loop() {
+  if (!running || !videoEl) return;
+  const now = performance.now();
+  const result = landmarker.detectForVideo(videoEl, now);
+
+  const hasFace = (result.faceLandmarks && result.faceLandmarks.length > 0);
+
+  if (!hasFace) {
+    resetEyeTrackers();
+    stopAlarmSound();
+    if (appState !== "searching") setAppState("searching");
+  } else {
+    const { left, right } = blinkScores(result);
+    updateEyeState(leftEye, left, now);
+    updateEyeState(rightEye, right, now);
+
+    let newState;
+    if (leftEye.closed && rightEye.closed) {
+      newState = "both-closed";
+    } else if (leftEye.closed) {
+      newState = "left-closed";
+    } else if (rightEye.closed) {
+      newState = "right-closed";
+    } else {
+      newState = "open";
+    }
+
+    if (newState === "both-closed") {
+      startAlarmSound();
+    } else {
+      stopAlarmSound();
+    }
+
+    if (appState !== newState) setAppState(newState);
+  }
+
+  rafId = requestAnimationFrame(loop);
+}
+
+async function start() {
+  running = true;
+  setAppState("searching");
+  logDebug("Tocco registrato, avvio in corso…");
+  // Deve avvenire in modo sincrono dentro il click per soddisfare le policy
+  // di autoplay dei browser: crea/risveglia l'AudioContext SUBITO,
+  // non quando servirà davvero (occhi chiusi) più avanti nel loop.
+  ensureAudio();
+  try {
+    logDebug("Richiedo accesso alla fotocamera…");
+    await startCamera();
+    logDebug("Fotocamera avviata. Carico il modello MediaPipe…");
+    await loadLandmarker();
+    logDebug("Modello caricato. Inizio rilevamento.");
+    if (!running) return; // messo in pausa durante il caricamento
+    rafId = requestAnimationFrame(loop);
+  } catch (err) {
+    console.error(err);
+    logDebug("Errore in start(): " + (err?.message || err), true);
+    statusEl.textContent = "Accesso alla fotocamera negato o non disponibile";
+    running = false;
+    setAppState("idle");
+  }
+}
+
+function pause() {
+  running = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  resetEyeTrackers();
+  stopAlarmSound();
+  stopCamera();
+  setAppState("idle");
+}
+
+btn.addEventListener("click", () => {
+  if (!running) {
+    start();
+  } else {
+    pause();
+  }
+});
+
+setAppState("idle");
+</script>
+</body>
+</html>

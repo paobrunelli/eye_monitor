@@ -1,5 +1,10 @@
 eye-monitor
 Monitora lo stato aperti/chiusi degli occhi
+
+Sono disponibili due varianti dello script, entrambe standalone (nessun backend):
+-	`eye-monitor-2stati.html` — versione originale a 2 stati: verde (occhi aperti) / rosso con suono continuo (occhi chiusi), basata sulla media dei due blendshape eyeBlinkLeft/eyeBlinkRight, senza distinguere i due occhi.
+-	`eye-monitor-4stati.html` — versione con occhi distinti: verde (entrambi aperti) / giallo (solo sinistro chiuso) / blu (solo destro chiuso) / rosso con suono continuo (entrambi chiusi). L'allarme sonoro scatta solo con entrambi gli occhi chiusi.
+
 Cosa fa	
 eye-monitor è un script html eseguibile in un browser, e con questo assimilabile ad una app, che rileva lo stato degli occhi inquadrati da una webcam collegata a un PC o dalla camera selfie di un telefonino android. Una volta inqudrati gli occhi con la camera, se gli occhi sono aperti sul dispositivo è visibile un cerchio verde, se  gli occhi si chiudono il cerchio diventa rosso e il dispositivo emette un suono  che smette quando gl occhi vengono riaperti.
 Il cuore della app è costituito dalla libreria mediapipe di google le cui funzioni, invocati dallo script html, consentono il rilevamento e tracciamento di landmark del volto frame dopo frame, quindi il riconoscimento di uno stato “occhio chiuso" e di uno “occhio aperto".
@@ -21,7 +26,7 @@ Il funzionamento dello script è stato verificato  con i browser:
 -	edge
 -	firefox
 tutti devono avere accesso alla camera selfie, eventualmente abilitandolo a richiesta
-come farlo funzionare
+come farlo funzionare (variante eye-monitor-4stati.html; eye-monitor-2stati.html è identica ma con solo verde/rosso, senza distinzione sinistro/destro)
 Il file che contiene lo script html deve essere disponibile nel file system del dispositivo su cui si intende eseguirlo. Non basta quindi attivarlo nelle preview disponibili quando lo si riceve come allegato in una mail o in un messaggio whatsapp.
 Una volta che il file è disponibile:
 -	Si apre il file html con un browser certificato Sul dispositivo appare un cerchio nero
