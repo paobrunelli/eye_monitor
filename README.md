@@ -27,11 +27,16 @@ Una volta che il file è disponibile:
 -	Si apre il file html con un browser certificato Sul dispositivo appare un cerchio nero
 -	Al primo tap il cerchio diventa rosso e …
 -	…la telecamera si accende e resta in attea di inauadrare gli occhi di una persona
--	Quando vengono inquadati gli occhi  il cerchio diventa verde
--	Quando  gli occhi inquadrati si chiudono il cerchio diventa rosso e viene emesso un suono continuo  
+-	Quando vengono inquadati gli occhi  il cerchio diventa verde (entrambi aperti)
+-	Se si chiude solo l’occhio sinistro (destro aperto) il cerchio diventa giallo
+-	Se si chiude solo l’occhio destro (sinistro aperto) il cerchio diventa blu
+-	Quando entrambi gli occhi inquadrati si chiudono il cerchio diventa rosso e viene emesso un suono continuo
 -	Se gli occhi scompaiono dall’inquadratura  il cerchio è rosso e non viene emesso alcun suono
--	Se gli occhi inquadrati si riaprono,il cerchio diventa verde  
--	Se si fa tap sul cerchio rosso o verde il cerchio diventa nero e la app va in standby.    
+-	Se gli occhi inquadrati si riaprono,il cerchio torna verde
+-	Se si fa tap sul cerchio  il cerchio diventa nero e la app va in standby.
+
+Sinistro/destro sono riferiti alla persona inquadrata (occhio sinistro e destro anatomici), non alla posizione sullo schermo: corrispondono direttamente ai blendshape MediaPipe eyeBlinkLeft/eyeBlinkRight, già riferiti al soggetto.
+L’allarme sonoro scatta solo quando entrambi gli occhi sono chiusi; gli stati con un solo occhio chiuso (giallo/blu) sono solo visivi, utili ad es. per rilevare un’asimmetria (ptosi, paralisi facciale) senza far scattare l’allarme per un blink asincrono dei due occhi.
 Considerazioni
 Gli algoritmi di analisi della sequenza di frame possono essere diversi, a seconda della prontezza del riconoscimento di un cambio di stato o della capacità di filtrare i battiti di ciglia che si intende avere.
  È possibile scrivere algoritmi che identificano sequenze apri-chiudi-apri… temporizzate, per poter comunicare con il battito di ciglia,  o, per scopi clinici, lavorare sui due occhi in modo distinto.
