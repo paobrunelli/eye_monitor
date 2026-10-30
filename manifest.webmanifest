@@ -1,0 +1,17 @@
+{
+  "name": "Monitor Occhi",
+  "short_name": "Occhi",
+  "description": "Rileva occhi aperti o chiusi con la fotocamera frontale e suona un allarme continuo ad occhi chiusi",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#9a9a9e",
+  "theme_color": "#9a9a9e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
