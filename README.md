@@ -56,6 +56,13 @@ Pensata per verificare a quale frame rate della fotocamera il riconoscimento del
 -	Il conteggio dei frame usa, quando disponibile, requestVideoFrameCallback: è legato ai frame reali della fotocamera, non al refresh dello schermo, così il numero di "frame di chiusura" registrato è confrontabile tra un fps e l'altro. Se il browser non lo supporta, il conteggio ricade sul refresh schermo e viene segnalato come approssimativo.
 -	I contatori "Frame elaborati" e "FPS osservati" (frame elaborati al secondo) permettono di capire se il dispositivo riesce davvero a tenere il passo dell'fps richiesto, oppure se il riconoscimento (MediaPipe) diventa il collo di bottiglia agli fps più alti.
 -	Il log si accumula tra pause/riprese dello stesso test; il tasto "Svuota" lo azzera (utile per separare i test fatti con fps diversi) e "Esporta CSV" scarica i dati raccolti (incluso l'fps richiesto e quello negoziato) per confrontarli fuori dall'app.
+
+PWA del test battito: cartella blink-test/
+La cartella `blink-test/` contiene la stessa pagina installata come PWA indipendente (icona in home screen, funzionamento offline dopo il primo avvio online), con manifest e service worker propri (scope e nomi di cache diversi da quelli della app principale, per non interferire con essa sullo stesso sito).
+-	Richiede che il sito sia servito via **https** (es. GitHub Pages): un service worker non si registra su un file aperto con `file://`, quindi aperta così la pagina funziona per il rilevamento ma non è installabile né disponibile offline.
+-	Per pubblicarla con GitHub Pages su questo repository: Settings → Pages → Build and deployment → Source "Deploy from a branch" → Branch `main` / `/(root)` → Save. L'URL sarà del tipo `https://<utente>.github.io/eye_monitor/blink-test/`. Nota: essendo il repo privato, GitHub Pages è disponibile solo con un piano GitHub Pro/Team/Enterprise (sul piano Free le Pages richiedono repo pubblico).
+-	Da quell'URL, sul telefono: menu del browser → "Aggiungi a schermata Home" (o il prompt di installazione automatico) per installarla come app a sé stante, separata da "Monitor Occhi".
+-	Bug noto (preesistente, non introdotto da questa variante): il manifest/index.html della app principale a root puntano alle icone come `icons/icon-192.png` ecc., ma i file sono in realtà alla radice del repo (`icon-192.png`); l'icona della PWA principale quindi probabilmente non si carica. La PWA di blink-test punta invece ai percorsi corretti.
 Il ruolo di Claude, il bot di Antropicĥ
 Il codice è stato prodotto totalmente da Claude-chat, in base a specifiche fornitegli in modo discorsivo. 3+
 
