@@ -4,6 +4,7 @@ Monitora lo stato aperti/chiusi degli occhi
 Sono disponibili due varianti dello script, entrambe standalone (nessun backend):
 -	`eye-monitor-2stati.html` — versione originale a 2 stati: verde (occhi aperti) / rosso con suono continuo (occhi chiusi), basata sulla media dei due blendshape eyeBlinkLeft/eyeBlinkRight, senza distinguere i due occhi.
 -	`eye-monitor-4stati.html` — versione con occhi distinti: verde (entrambi aperti) / giallo (solo sinistro chiuso) / blu (solo destro chiuso) / rosso con suono continuo (entrambi chiusi). L'allarme sonoro scatta solo con entrambi gli occhi chiusi.
+-	`eye-monitor-blink-test.html` — variante di test per verificare il riconoscimento del singolo battito di ciglio a diversi frame rate della fotocamera (vedi sezione dedicata più sotto).
 
 Cosa fa	
 eye-monitor è un script html eseguibile in un browser, e con questo assimilabile ad una app, che rileva lo stato degli occhi inquadrati da una webcam collegata a un PC o dalla camera selfie di un telefonino android. Una volta inqudrati gli occhi con la camera, se gli occhi sono aperti sul dispositivo è visibile un cerchio verde, se  gli occhi si chiudono il cerchio diventa rosso e il dispositivo emette un suono  che smette quando gl occhi vengono riaperti.
@@ -45,6 +46,16 @@ L’allarme sonoro scatta solo quando entrambi gli occhi sono chiusi; gli stati 
 Considerazioni
 Gli algoritmi di analisi della sequenza di frame possono essere diversi, a seconda della prontezza del riconoscimento di un cambio di stato o della capacità di filtrare i battiti di ciglia che si intende avere.
  È possibile scrivere algoritmi che identificano sequenze apri-chiudi-apri… temporizzate, per poter comunicare con il battito di ciglia,  o, per scopi clinici, lavorare sui due occhi in modo distinto.
+
+Variante di test: eye-monitor-blink-test.html (es. Galaxy S23)
+Pensata per verificare a quale frame rate della fotocamera il riconoscimento del singolo battito di ciglio resta affidabile.
+-	Prima di avviare, si sceglie da un menu l'fps richiesto alla fotocamera (20-120). Lo script lo richiede con getUserMedia (prima "exact", poi in automatico "ideal" se il dispositivo non lo supporta) tramite i vincoli del video; è quindi possibile impostarlo a programma, ma il valore ottenuto è comunque quello che il dispositivo riesce davvero a negoziare (letto da track.getSettings() e mostrato a schermo) — molti telefoni via browser si fermano a 30 o 60 fps, perché le modalità slow-motion (90/120) sono spesso riservate alla app Camera nativa e non esposte al web.
+-	Un solo cerchio segnala lo stato: grigio = ricerca volto, verde = occhio aperto, rosso = occhio chiuso (senza allarme sonoro continuo).
+-	A differenza delle altre due varianti, qui non c'è alcuna soglia minima di durata della chiusura: ogni chiusura, anche di un solo frame, viene contata, perché lo scopo è proprio catturare i battiti rapidi, non filtrarli.
+-	Ad ogni battito completo (chiusura seguita da riapertura) la app emette un breve bip e registra nel log: numero progressivo, orario con i millisecondi, numero di frame in cui l'occhio è risultato chiuso, durata stimata in ms.
+-	Il conteggio dei frame usa, quando disponibile, requestVideoFrameCallback: è legato ai frame reali della fotocamera, non al refresh dello schermo, così il numero di "frame di chiusura" registrato è confrontabile tra un fps e l'altro. Se il browser non lo supporta, il conteggio ricade sul refresh schermo e viene segnalato come approssimativo.
+-	I contatori "Frame elaborati" e "FPS osservati" (frame elaborati al secondo) permettono di capire se il dispositivo riesce davvero a tenere il passo dell'fps richiesto, oppure se il riconoscimento (MediaPipe) diventa il collo di bottiglia agli fps più alti.
+-	Il log si accumula tra pause/riprese dello stesso test; il tasto "Svuota" lo azzera (utile per separare i test fatti con fps diversi) e "Esporta CSV" scarica i dati raccolti (incluso l'fps richiesto e quello negoziato) per confrontarli fuori dall'app.
 Il ruolo di Claude, il bot di Antropicĥ
 Il codice è stato prodotto totalmente da Claude-chat, in base a specifiche fornitegli in modo discorsivo. 3+
 
